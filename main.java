@@ -1,0 +1,1 @@
+// Starting Ruby-Log-Shipper service\n
