@@ -1,44 +1,58 @@
-<!-- PORTFOLIO PROJECT PROFILE: maintained by the repository owner -->
+# Sky Log Shipper Ruby
 
-## Project profile and code-audit snapshot
+A dependency-light Ruby 3.3 JSONL log batch shipper for forwarding bounded structured events to a caller-configured HTTPS endpoint. This repository is an engineering-beta transport component, not a complete logging platform.
 
-**What this is:** **Ruby-Log-Shipper** is a public repository described as: “Enterprise-grade log shipper implementation in Ruby. #SkyCoin4444 #AI #Blockchain #DevOps #Innovation” Its dominant language signals are **Python (4 files)**.
+## Implemented behavior
 
-**Why it has value:** Its value is best understood through the implementation evidence currently present in the repository: **18 tracked files** were observed in the shallow audit, with the source structure and existing documentation providing the project’s specific context. This README does not treat a prototype, experiment, or archive as a production system without supporting evidence.
+- Native Ruby implementation using standard-library JSON, URI, Net::HTTP, time, and SHA-256 support.
+- Reads newline-delimited JSON events from standard input.
+- Requires timestamp, level, message, and source fields; optional attributes object.
+- Supports `DEBUG`, `INFO`, `WARN`, and `ERROR` levels.
+- Maximum 100 events per batch, 32 KiB per message, and 512 KiB encoded batch.
+- HTTPS-only destination URLs with embedded credentials and fragments rejected.
+- Deterministic SHA-256 batch identifier sent as `X-Sky-Batch-Id`.
+- Optional bearer token through `SKY_LOG_TOKEN` without writing the token to output.
+- Explicit connection/read timeouts and fail-closed handling of non-2xx responses.
+- `--dry-run` mode validates and fingerprints input without making any network request.
+- Injectable transport contract for deterministic tests.
+- Non-root container packaging.
 
-**Implementation evidence:** 2 test-related file(s) detected; 2 dependency or package manifest(s) detected; 2 build/CI/infrastructure signal(s) detected; and 3 documentation or governance file(s) detected. Test filenames observed include `tests/__init__.py`, `tests/test_main.py`. Dependency or package files include `package.json`, `requirements.txt`. Build, CI, or infrastructure signals include `Dockerfile`, `.github/workflows/ci.yml`.
+## Input example
 
-**Current status:** The repository is tracked on the `main` branch. The existing source tree, configuration, tests, workflows, and documentation remain authoritative for supported behavior and maturity. A code audit is not a production-readiness certification, and the presence of a test or workflow file does not establish that all checks pass.
+```json
+{"timestamp":"2026-08-24T12:00:00Z","level":"INFO","message":"gateway started","source":"gateway","attributes":{"region":"local"}}
+```
 
-**Relationship to the wider portfolio:** This repository is one focused component of the broader Skyler Blue Spillers portfolio across AI, software engineering, cloud and DevOps, cybersecurity, blockchain, finance, education, social systems, and creative work. It may provide a service boundary, implementation pattern, experiment, archive, or reusable idea for related repositories. Treat repositories as technical dependencies only where documented interfaces and verified project requirements support that relationship.
+Validate without delivery:
 
-**Quality and security note:** No obvious secret-like pattern was detected by the limited static scan; this is not a substitute for a security audit. No TODO/FIXME marker was detected in the scanned text files.
+```bash
+cat events.jsonl | ruby bin/sky-log-shipper --dry-run
+```
 
----
+Deliver:
 
-# Ruby Log Shipper
+```bash
+export SKY_LOG_ENDPOINT='https://logs.example.test/v1/events'
+export SKY_LOG_TOKEN='replace-with-runtime-secret'
+cat events.jsonl | ruby bin/sky-log-shipper
+```
 
-![GitHub stars](https://img.shields.io/github/stars/skylerblue333/Ruby-Log-Shipper?style=flat-square)
-![GitHub license](https://img.shields.io/github/license/skylerblue333/Ruby-Log-Shipper?style=flat-square)
+## Verification
 
-## 🌟 Overview
-**Ruby-Log-Shipper** is a professional-grade project within the **SkyCoin4444** ecosystem. It focuses on delivering high-value solutions in the domain of **Python**.
+CI runs Ruby syntax checks, deterministic unit tests, dry-run CLI smoke tests, Docker build, non-root verification, and a container dry-run smoke test.
 
-## 🚀 Key Features
-- **Scalable Architecture**: Designed for enterprise-level growth and performance.
-- **Modern Standards**: Implements best practices for clean code and maintainability.
-- **Robust Integration**: Built to work seamlessly within modern cloud-native environments.
+## Architecture
 
-## 🛠️ Technology Stack
-- **Primary Domain**: Python
-- **Ecosystem**: SkyCoin4444 Digital Platform
+`SkyLogShipper::Batch` validates and canonically encodes events, `Endpoint` validates the HTTPS destination, `HttpTransport` owns bounded HTTP delivery, and `Shipper` composes them behind an injectable transport boundary. The CLI handles JSONL input and runtime configuration.
 
-## 📂 Structure
-The project is organized into a modular structure to ensure clarity and ease of development.
+## SKYCOIN4444 integration
 
-## 👨‍💻 Author
-**Skyler Blue Spillers**
-*Professional Chess Player & Software Engineer*
+This component can forward structured logs from SKYCOIN4444 adapters or services to a separately operated HTTPS ingestion endpoint. Production use should add durable local spooling, retry/backoff policy, authenticated destination management, metrics, rate controls, secret management, and delivery observability rather than assuming a single synchronous POST is lossless.
 
----
-*Powered by SkyCoin4444*
+## Status and limitations
+
+**Status: Engineering Beta.** Code/container verification is being established; deployment is not verified.
+
+The current implementation does not provide disk buffering, retries, compression, mTLS, certificate pinning, proxy support, destination allowlisting, multi-tenant routing, metrics, backpressure across producers, exactly-once delivery, guaranteed ordering across processes, HA, or a managed log backend. It should not be described as production-ready or lossless.
+
+See `SECURITY.md` and `CHANGELOG.md` for operating boundaries and productization history.
