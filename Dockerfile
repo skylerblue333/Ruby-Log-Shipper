@@ -1,8 +1,9 @@
-FROM python:3.11-slim
+FROM ruby:3.3-alpine
+
 WORKDIR /app
-COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
-COPY . .
-ENV PYTHONPATH=/app
-EXPOSE 8080
-CMD ["uvicorn", "src.main:app", "--host", "0.0.0.0", "--port", "8080"]
+RUN addgroup -S app && adduser -S -G app app
+COPY lib ./lib
+COPY bin ./bin
+RUN chmod +x /app/bin/sky-log-shipper
+USER app
+ENTRYPOINT ["ruby", "/app/bin/sky-log-shipper"]
