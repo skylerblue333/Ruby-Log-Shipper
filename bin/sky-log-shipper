@@ -1,0 +1,40 @@
+#!/usr/bin/env ruby
+# frozen_string_literal: true
+
+require "json"
+require "optparse"
+require_relative "../lib/sky_log_shipper"
+
+options = { dry_run: false }
+OptionParser.new do |parser|
+  parser.banner = "Usage: sky-log-shipper [--dry-run] < events.jsonl"
+  parser.on("--dry-run", "Validate and summarize without network delivery") { options[:dry_run] = true }
+end.parse!
+
+begin
+  events = STDIN.each_line.filter_map do |line|
+    next if line.strip.empty?
+    parsed = JSON.parse(line)
+    raise SkyLogShipper::ValidationError, "each JSONL line must be an object" unless parsed.is_a?(Hash)
+    parsed
+  end
+  batch = SkyLogShipper::Batch.new(events)
+
+  if options[:dry_run]
+    puts JSON.generate({ "batch_id" => batch.batch_id, "event_count" => batch.events.length, "delivered" => false })
+    exit 0
+  end
+
+  endpoint = ENV.fetch("SKY_LOG_ENDPOINT")
+  delivery = SkyLogShipper::Shipper.new(endpoint:, token: ENV["SKY_LOG_TOKEN"]).ship(events)
+  puts JSON.generate({ "batch_id" => delivery.batch_id, "event_count" => delivery.event_count, "status" => delivery.status, "delivered" => true })
+rescue KeyError
+  warn JSON.generate({ "error" => "SKY_LOG_ENDPOINT is required unless --dry-run is used" })
+  exit 2
+rescue JSON::ParserError => error
+  warn JSON.generate({ "error" => "invalid_json", "detail" => error.message })
+  exit 2
+rescue SkyLogShipper::Error => error
+  warn JSON.generate({ "error" => error.class.name.split("::").last, "detail" => error.message })
+  exit 3
+end
