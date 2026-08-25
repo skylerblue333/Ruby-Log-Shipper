@@ -1,12 +1,36 @@
-name: CI
-on: [push, pull_request]
+name: ruby-log-shipper-ci
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
 jobs:
-  test:
+  verify:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v3
-      - uses: actions/setup-python@v4
+      - uses: actions/checkout@v4
+      - uses: ruby/setup-ruby@v1
         with:
-          python-version: '3.11'
-      - run: pip install -r requirements.txt
-      - run: pytest tests/ -v
+          ruby-version: '3.3'
+      - name: Install test dependency
+        run: gem install minitest --no-document
+      - name: Syntax
+        run: |
+          ruby -c lib/sky_log_shipper.rb
+          ruby -c bin/sky-log-shipper
+          ruby -c test/test_log_shipper.rb
+      - name: Tests
+        run: ruby -Ilib:test test/test_log_shipper.rb
+      - name: Dry-run CLI smoke
+        run: |
+          printf '%s\n' '{"timestamp":"2026-08-24T12:00:00Z","level":"INFO","message":"smoke","source":"ci"}' | ruby bin/sky-log-shipper --dry-run | grep '"delivered":false'
+      - name: Build image
+        run: docker build -t sky-ruby-log-shipper:ci .
+      - name: Verify non-root image
+        run: test "$(docker run --rm --entrypoint id sky-ruby-log-shipper:ci -u)" != "0"
+      - name: Container dry-run smoke
+        run: |
+          printf '%s\n' '{"timestamp":"2026-08-24T12:00:00Z","level":"INFO","message":"container","source":"ci"}' | docker run --rm -i sky-ruby-log-shipper:ci --dry-run | grep '"delivered":false'
